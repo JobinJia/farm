@@ -190,9 +190,8 @@ impl Plugin for FarmPluginLazyCompilation {
         let relative_source = relative(&dir, &resolved_path);
         let content = format!(
           r#"
-          import _default_import from "./{0}";
-          export default _default_import;
-          export * from "./{0}";
+          import * as ns from "./{0}"
+          module.exports = ns;
         "#,
           relative_source
         );

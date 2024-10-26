@@ -13,6 +13,7 @@ use farmfe_core::{
   },
 };
 use farmfe_toolkit::{
+  script::module2cjs::{self, TransformModuleDeclsOptions},
   swc_ecma_transforms::{
     feature::enable_available_feature_from_es_version,
     modules::{
@@ -25,12 +26,7 @@ use farmfe_toolkit::{
 };
 
 use crate::resource_pot_to_bundle::{
-  bundle::{bundle_reference::BundleReference, ModuleAnalyzerManager, ModuleGlobalUniqName},
-  modules_analyzer::module_analyzer::ModuleAnalyzer,
-  polyfill::{Polyfill, SimplePolyfill},
-  targets::util::wrap_commonjs,
-  uniq_name::BundleVariable,
-  ShareBundleOptions,
+  bundle::{bundle_reference::BundleReference, ModuleAnalyzerManager, ModuleGlobalUniqName}, modules_analyzer::module_analyzer::ModuleAnalyzer, polyfill::{Polyfill, SimplePolyfill}, targets::util::wrap_commonjs, uniq_name::BundleVariable, ShareBundleContext, ShareBundleOptions
 };
 
 use super::util::CJSReplace;
@@ -118,24 +114,36 @@ impl CjsPatch {
     ast: &mut EcmaAstModule,
     module_graph: &ModuleGraph,
     unresolved_mark: Mark,
-    es_version: EsVersion,
+    context: &Arc<CompilationContext>,
+    options: &ShareBundleContext,
   ) {
-    let module = module_graph.module(module_id).unwrap();
+    if options.options.concatenation_module {
+      module2cjs::transform_module_decls(
+        ast,
+        unresolved_mark,
+        &module2cjs::OriginalRuntimeCallee { unresolved_mark },
+        TransformModuleDeclsOptions {
+          is_target_legacy: context.config.script.is_target_legacy(),
+        },
+      );
+    } else {
+      let module = module_graph.module(module_id).unwrap();
 
-    let comments = module.meta.as_script().comments.clone().into();
+      let comments = module.meta.as_script().comments.clone().into();
 
-    ast.visit_mut_with(&mut import_analyzer(ImportInterop::Swc, true));
+      ast.visit_mut_with(&mut import_analyzer(ImportInterop::Swc, true));
 
-    ast.visit_mut_with(&mut common_js::<&SingleThreadedComments>(
-      unresolved_mark,
-      SwcConfig {
-        ignore_dynamic: true,
-        preserve_import_meta: true,
-        ..Default::default()
-      },
-      enable_available_feature_from_es_version(es_version),
-      Some(&comments),
-    ));
+      ast.visit_mut_with(&mut common_js::<&SingleThreadedComments>(
+        unresolved_mark,
+        SwcConfig {
+          ignore_dynamic: true,
+          preserve_import_meta: true,
+          ..Default::default()
+        },
+        enable_available_feature_from_es_version(context.config.script.target),
+        Some(&comments),
+      ));
+    }
   }
 
   /// transform hybrid and commonjs module to esm
@@ -146,6 +154,7 @@ impl CjsPatch {
     bundle_variable: &BundleVariable,
     bundle_reference: &mut BundleReference,
     polyfill: &mut SimplePolyfill,
+    options: &ShareBundleContext,
   ) -> Result<()> {
     let module_analyzer = module_analyzer_manager
       .module_map
@@ -160,7 +169,8 @@ impl CjsPatch {
         &mut module_analyzer.ast,
         module_analyzer_manager.module_graph,
         unresolved_mark,
-        context.config.script.target,
+        context,
+        options,
       );
     }
 
@@ -195,7 +205,7 @@ impl CjsPatch {
     module_graph: &ModuleGraph,
     module_global_uniq_name: &ModuleGlobalUniqName,
     module_map: &HashMap<ModuleId, ModuleAnalyzer>,
-    options: &'a ShareBundleOptions,
+    options: &'a ShareBundleContext,
   ) {
     let mut replacer: CJSReplace = CJSReplace {
       unresolved_mark: mark.0,
@@ -209,7 +219,7 @@ impl CjsPatch {
       module_graph,
       bundle_reference,
       module_map,
-      options,
+      context: options,
     };
 
     ast.visit_mut_with(&mut replacer);

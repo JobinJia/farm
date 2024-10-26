@@ -32,6 +32,7 @@ use self::swc_try_with::try_with;
 
 pub mod defined_idents_collector;
 pub mod swc_try_with;
+pub mod module2cjs;
 
 /// parse the content of a module to [SwcModule] ast.
 pub fn parse_module(
