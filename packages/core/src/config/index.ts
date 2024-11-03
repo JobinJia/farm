@@ -730,7 +730,7 @@ export async function readConfigFile(
 
     return config;
   } finally {
-    fse.unlink(getFilePath(outputPath, fileName)).catch(() => {});
+    // fse.unlink(getFilePath(outputPath, fileName)).catch(() => {});
   }
 }
 
